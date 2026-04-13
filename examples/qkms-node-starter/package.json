@@ -1,0 +1,24 @@
+{
+  "name": "qkms-node-starter",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Express server demonstrating @quilibrium/qkms-sdk-node — port of privy-node-starter.",
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "node --enable-source-maps dist/index.js",
+    "dev": "tsx src/index.ts"
+  },
+  "dependencies": {
+    "@quilibrium/qkms-sdk-node": "workspace:*",
+    "dotenv": "^16.4.5",
+    "express": "^5.1.0",
+    "viem": "^2.37.5"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.3"
+  }
+}

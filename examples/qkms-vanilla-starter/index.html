@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>qkms-sdk vanilla starter</title>
+    <style>
+      body {
+        font-family: system-ui, -apple-system, sans-serif;
+        max-width: 720px;
+        margin: 2rem auto;
+        padding: 0 1rem;
+      }
+      h1 { font-size: 1.5rem; }
+      section { margin: 1.5rem 0; padding: 1rem; border: 1px solid #ccc; border-radius: 8px; }
+      label { display: block; margin: 0.5rem 0; }
+      input { width: 100%; padding: 0.5rem; font-family: monospace; font-size: 0.875rem; box-sizing: border-box; }
+      button { padding: 0.5rem 1rem; cursor: pointer; margin-top: 0.5rem; }
+      button:disabled { opacity: 0.5; cursor: not-allowed; }
+      code { font-family: monospace; word-break: break-all; font-size: 0.875rem; }
+      .hint { color: #666; font-size: 0.875rem; margin-top: 0.25rem; }
+      .error { color: #c00; white-space: pre-wrap; margin-top: 0.5rem; }
+      .success { color: #080; }
+      .hidden { display: none; }
+    </style>
+  </head>
+  <body>
+    <h1>qkms-sdk vanilla starter</h1>
+    <p class="hint">
+      Drop-in replacement for
+      <code>@privy-io/js-sdk-core</code>'s <code>Privy</code> class, backed by QKMS threshold MPC.
+    </p>
+
+    <section id="creds-section">
+      <h2>Credentials</h2>
+      <label>
+        QNZM access key
+        <input id="access-key" type="text" placeholder="AKIA..." />
+      </label>
+      <label>
+        QNZM secret key
+        <input id="secret-key" type="password" />
+      </label>
+      <label>
+        QKMS server URL
+        <input id="qkms-server" type="text" value="https://qkms.quilibrium.com" />
+      </label>
+      <button id="connect-btn">Save & connect</button>
+      <p id="creds-status" class="hint"></p>
+    </section>
+
+    <section id="wallet-section" class="hidden">
+      <h2>Wallet</h2>
+      <p id="user-info" class="hint"></p>
+      <div id="no-wallet">
+        <button id="create-wallet-btn">Create wallet (runs DKG)</button>
+      </div>
+      <div id="wallet-info" class="hidden">
+        <div><strong>Address:</strong> <code id="wallet-address"></code></div>
+        <div><strong>Key id:</strong> <code id="wallet-keyid"></code></div>
+      </div>
+      <p id="wallet-error" class="error hidden"></p>
+    </section>
+
+    <section id="sign-section" class="hidden">
+      <h2>Sign message</h2>
+      <label>
+        Message
+        <input id="message" type="text" value="hello from qkms-sdk vanilla" />
+      </label>
+      <button id="sign-btn">Sign</button>
+      <div id="sig-output" class="hidden">
+        <div><strong>Signature:</strong> <code id="signature"></code></div>
+        <div id="recovery-result"></div>
+      </div>
+      <p id="sign-error" class="error hidden"></p>
+    </section>
+
+    <section id="logout-section" class="hidden">
+      <button id="logout-btn">Log out</button>
+    </section>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

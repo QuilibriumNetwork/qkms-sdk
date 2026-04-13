@@ -1,0 +1,63 @@
+{
+  "name": "@quilibrium/qkms-sdk-core",
+  "version": "0.1.0",
+  "description": "Core engine for qkms-sdk: SigV4 RPC client, MPC sidecar, storage adapters, EIP-1193 wallet provider",
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./sidecar": {
+      "types": "./dist/sidecar/index.d.ts",
+      "import": "./dist/sidecar/index.js"
+    },
+    "./storage": {
+      "types": "./dist/storage/index.d.ts",
+      "import": "./dist/storage/index.js"
+    },
+    "./wallets": {
+      "types": "./dist/wallets/index.d.ts",
+      "import": "./dist/wallets/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "src"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "clean": "rm -rf dist",
+    "test": "npx tsx --test src/**/*.test.ts"
+  },
+  "dependencies": {
+    "@noble/curves": "^1.6.0",
+    "@noble/hashes": "^1.5.0",
+    "@scure/base": "^1.1.9",
+    "idb": "^8.0.0",
+    "dkls23wasm": "file:../../../ceremonyclient/crates/dkls23-wasm/pkg",
+    "channelwasm": "file:../../../ceremonyclient/crates/channel-wasm/pkg",
+    "bls48581wasm": "file:../../../ceremonyclient/crates/bls48581-wasm/pkg",
+    "bulletproofswasm": "file:../../../ceremonyclient/crates/bulletproofs-wasm/pkg",
+    "@quilibrium/mpc-wasm": "file:../../wasm/mpc-wasm/pkg"
+  },
+  "peerDependencies": {
+    "viem": "^2.0.0"
+  },
+  "peerDependenciesMeta": {
+    "viem": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.6.3",
+    "viem": "^2.37.5"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

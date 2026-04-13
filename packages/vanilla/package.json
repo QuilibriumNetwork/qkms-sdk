@@ -1,0 +1,33 @@
+{
+  "name": "@quilibrium/qkms-sdk",
+  "version": "0.1.0",
+  "description": "Framework-agnostic JavaScript SDK for qkms-sdk. Mirrors @privy-io/js-sdk-core — apps can drop in QKMS-backed embedded wallets with a one-line import swap.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "src"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "clean": "rm -rf dist",
+    "test": "echo 'no tests yet'"
+  },
+  "dependencies": {
+    "@quilibrium/qkms-sdk-core": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.3"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "name": "qkms-sdk",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Threshold MPC key management JavaScript SDK backed by QKMS",
+  "scripts": {
+    "build": "pnpm -r --filter './packages/**' build",
+    "test": "pnpm -r --filter './packages/**' test",
+    "test:all": "./test.sh",
+    "clean": "pnpm -r exec rm -rf dist node_modules"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.3"
+  },
+  "packageManager": "pnpm@10.8.1"
+}

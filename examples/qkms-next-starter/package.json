@@ -1,0 +1,27 @@
+{
+  "name": "qkms-next-starter",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Next.js 15 example demonstrating @quilibrium/qkms-sdk-react inside an App Router layout. Port of privy-next-starter's core wallet flow.",
+  "type": "module",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@quilibrium/qkms-sdk-core": "workspace:*",
+    "@quilibrium/qkms-sdk-react": "workspace:*",
+    "next": "^15.0.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "viem": "^2.37.5"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/react": "^18.3.0",
+    "@types/react-dom": "^18.3.0",
+    "typescript": "^5.6.3"
+  }
+}

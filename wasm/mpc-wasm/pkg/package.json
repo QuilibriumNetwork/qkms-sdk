@@ -1,0 +1,22 @@
+{
+  "name": "@quilibrium/mpc-wasm",
+  "version": "0.1.0",
+  "description": "nekryptology MPC protocols (FROST, RSA-N, ...) compiled to GOOS=js GOARCH=wasm. Provides byte-level interop with the Go server-side QKMS sidecar.",
+  "type": "module",
+  "main": "./loader.js",
+  "types": "./loader.d.ts",
+  "files": [
+    "mpc.wasm",
+    "wasm_exec.js",
+    "loader.js",
+    "loader.d.ts"
+  ],
+  "exports": {
+    ".": {
+      "types": "./loader.d.ts",
+      "import": "./loader.js"
+    },
+    "./mpc.wasm": "./mpc.wasm",
+    "./wasm_exec.js": "./wasm_exec.js"
+  }
+}

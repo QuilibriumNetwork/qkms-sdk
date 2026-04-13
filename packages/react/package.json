@@ -1,0 +1,46 @@
+{
+  "name": "@quilibrium/qkms-sdk-react",
+  "version": "0.1.0",
+  "description": "React provider and hooks for qkms-sdk. Mirrors @privy-io/react-auth surface so apps can drop in QKMS-backed wallets.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./solana": {
+      "types": "./dist/solana/index.d.ts",
+      "import": "./dist/solana/index.js"
+    },
+    "./extended-chains": {
+      "types": "./dist/extended-chains/index.d.ts",
+      "import": "./dist/extended-chains/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "src"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "clean": "rm -rf dist",
+    "test": "echo 'no tests yet'"
+  },
+  "dependencies": {
+    "@quilibrium/qkms-sdk-core": "workspace:*"
+  },
+  "peerDependencies": {
+    "react": ">=18"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.0",
+    "react": "^18.3.0",
+    "typescript": "^5.6.3"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}
