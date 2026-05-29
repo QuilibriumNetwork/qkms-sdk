@@ -64,8 +64,11 @@ function buildSidecar(args: StartArgs): Sidecar {
     const stored = await storage.get(`keyshare/${keyId}`);
     return stored ? new TextDecoder().decode(stored) : null;
   };
-  dklsSession.onKeyShareReady = async (keyId, keyShareHex) => {
+  dklsSession.onKeyShareReady = async (keyId, keyShareHex, publicKeyHex) => {
     await storage.put(`keyshare/${keyId}`, new TextEncoder().encode(keyShareHex));
+    if (publicKeyHex) {
+      await storage.put(`pubkey/${keyId}`, new TextEncoder().encode(publicKeyHex));
+    }
   };
 
   const frostSession = new FROSTSession();

@@ -123,6 +123,12 @@ export interface CreateKeyRequest {
   Tags?: Array<{ TagKey: string; TagValue: string }>;
   Participants?: string[];
   Threshold?: number;
+  /**
+   * Total party count (n in t-of-n). If omitted, the server infers it from
+   * `Participants.length`, but always sending it avoids the
+   * "Participants count doesn't match TotalParties, adjusting" warning.
+   */
+  TotalParties?: number;
 }
 
 export interface CreateKeyResponse {
@@ -179,10 +185,16 @@ export class QkmsRpcClient {
     });
   }
 
-  /** Generic typed RPC dispatch. Most callers should use the typed wrappers below. */
+  /**
+   * Generic typed RPC dispatch. Most callers should use the typed wrappers below.
+   * `query` lets callers append signed query parameters (e.g. `?async=1` for
+   * non-blocking CreateKey). The signer includes the canonical query string
+   * in the SigV4 hash so they're authenticated.
+   */
   async call<TReq extends object, TRes>(
     method: TrentServiceMethod,
     request: TReq,
+    query?: Record<string, string>,
   ): Promise<TRes> {
     const body = new TextEncoder().encode(JSON.stringify(request));
     const headers = new Headers({
@@ -191,9 +203,16 @@ export class QkmsRpcClient {
       'content-type': 'application/json',
       'x-amz-target': `TrentService.${method}`,
     });
-    await this.signer.signRequest('POST', this.endpoint, headers, body);
 
-    const res = await fetch(this.endpoint, {
+    let url = this.endpoint;
+    if (query && Object.keys(query).length > 0) {
+      const sp = new URLSearchParams(query);
+      url = `${this.endpoint}?${sp.toString()}`;
+    }
+
+    await this.signer.signRequest('POST', url, headers, body);
+
+    const res = await fetch(url, {
       method: 'POST',
       headers,
       body,
@@ -259,8 +278,18 @@ export class QkmsRpcClient {
   // Keys
   // ---------------------------------------------------------------------------
 
-  createKey(req: CreateKeyRequest): Promise<CreateKeyResponse> {
-    return this.call('CreateKey', req);
+  /**
+   * Create an MPC-backed key. By default this blocks until DKG completes.
+   * Pass `async: true` to make the server return immediately after the task
+   * is created — the response carries the new `KeyId` and the caller polls
+   * `getPublicKey` (or watches local storage) to detect completion.
+   *
+   * Async mode is the right shape for browser callers behind CDNs/WAFs
+   * whose proxy timeouts would otherwise kill the long-held HTTP socket.
+   */
+  createKey(req: CreateKeyRequest, opts?: { async?: boolean }): Promise<CreateKeyResponse> {
+    const query = opts?.async ? { async: '1' } : undefined;
+    return this.call('CreateKey', req, query);
   }
 
   sign(req: SignRequest): Promise<SignResponse> {

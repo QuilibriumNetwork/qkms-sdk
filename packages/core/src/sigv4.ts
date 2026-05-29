@@ -84,16 +84,44 @@ function formatDateStamp(d: Date): string {
   return `${yyyy}${mm}${dd}`;
 }
 
+/**
+ * RFC 3986 percent-encoding matching AWS SigV4. JS's `encodeURIComponent`
+ * leaves a few characters un-encoded that AWS encodes (`!`, `'`, `(`, `)`, `*`)
+ * and encodes a space as `+`; AWS uses `%20`.
+ */
+function awsUrlEncode(s: string): string {
+  return encodeURIComponent(s)
+    .replace(/[!'()*]/g, (c) => '%' + c.charCodeAt(0).toString(16).toUpperCase())
+    .replace(/\+/g, '%20');
+}
+
+/** Build canonical query string per AWS spec. Mirrors getCanonicalQueryString in qkms/src/handler/sigv4.go. */
+function buildCanonicalQueryString(searchParams: URLSearchParams): string {
+  const names: string[] = [];
+  searchParams.forEach((_v, name) => {
+    if (!names.includes(name)) names.push(name);
+  });
+  names.sort();
+  const parts: string[] = [];
+  for (const name of names) {
+    const values = searchParams.getAll(name).slice().sort();
+    for (const v of values) {
+      parts.push(`${awsUrlEncode(name)}=${awsUrlEncode(v)}`);
+    }
+  }
+  return parts.join('&');
+}
+
 /** Internal: build the canonical request string. Mirrors createCanonicalRequest in sigv4.go. */
 async function createCanonicalRequest(
   method: string,
   path: string,
+  searchParams: URLSearchParams,
   headers: Headers,
   body: Uint8Array,
 ): Promise<string> {
   const canonicalUri = path === '' ? '/' : path;
-  // QKMS uses POST to / with no query string.
-  const canonicalQueryString = '';
+  const canonicalQueryString = buildCanonicalQueryString(searchParams);
 
   // Canonical headers — exact order from SIGNED_HEADERS.
   const headerOrder = SIGNED_HEADERS.split(';');
@@ -190,6 +218,7 @@ export class SigV4Signer {
     const canonicalRequest = await createCanonicalRequest(
       method.toUpperCase(),
       parsed.pathname || '/',
+      parsed.searchParams,
       headers,
       body,
     );

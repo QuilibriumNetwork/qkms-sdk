@@ -108,6 +108,16 @@ export interface QkmsClientConfig {
    * Defaults to 2. Must be <= number of participants.
    */
   threshold?: number;
+  /**
+   * If true, the sidecar polls QKMS via `ListTasksForSidecar` (filtered by
+   * its own sidecar id). Required for any threshold scheme beyond 2-of-2,
+   * since multi-party DKG generates a per-sidecar task and each sidecar
+   * must only process its own.
+   *
+   * Auto-enabled when `participants.length > 2` or `threshold > 2`. Set
+   * explicitly to override the heuristic.
+   */
+  useTofN?: boolean;
 }
 
 export interface QkmsProviderProps {
@@ -195,6 +205,12 @@ export function QkmsProvider({
 
     let cancelled = false;
 
+    // Decide t-of-n polling mode. Anything beyond plain 2-of-2 needs
+    // ListTasksForSidecar so each sidecar only processes its own task.
+    const cfgParticipants = config?.participants ?? [];
+    const cfgThreshold = config?.threshold ?? 2;
+    const useTofN = config?.useTofN ?? (cfgParticipants.length > 2 || cfgThreshold > 2);
+
     async function init(): Promise<void> {
       // DB name must be stable across logins for the same user so key shares
       // persist. Use the user's stable identifier (from JWT claims) when
@@ -218,7 +234,7 @@ export function QkmsProvider({
         sidecar = new WorkerSidecar(createSidecarWorker(), {
           client: { server, accessKey, secretKey, region },
           dbName,
-          useTofN: false,
+          useTofN,
         });
       } else {
         // Direct Sidecar — runs on this thread. Used in Node / SSR /
@@ -230,8 +246,11 @@ export function QkmsProvider({
           if (!stored) return null;
           return new TextDecoder().decode(stored);
         };
-        dklsSession.onKeyShareReady = async (keyId, keyShareHex) => {
+        dklsSession.onKeyShareReady = async (keyId, keyShareHex, publicKeyHex) => {
           await adapter.put(`keyshare/${keyId}`, new TextEncoder().encode(keyShareHex));
+          if (publicKeyHex) {
+            await adapter.put(`pubkey/${keyId}`, new TextEncoder().encode(publicKeyHex));
+          }
         };
 
         const frostSession = new FROSTSession();
@@ -283,7 +302,7 @@ export function QkmsProvider({
           client: client!,
           storage: adapter,
           sessions: [frostSession, decaf448Session, blsSession, rsaSession, rsa2pcSession, dklsSession],
-          useTofN: false,
+          useTofN,
         });
       }
 

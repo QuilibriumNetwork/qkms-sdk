@@ -5,7 +5,7 @@
 import type { QkmsRpcClient } from '../client.js';
 import type { QkmsTask, SidecarIdentity } from '../types.js';
 import type { TaskDispatcher } from './dispatch.js';
-import { PeerChannel } from './peer-channel.js';
+import { PeerChannel, type PartyMessage } from './peer-channel.js';
 
 export interface PollLoopConfig {
   client: QkmsRpcClient;
@@ -102,37 +102,96 @@ export class PollLoop {
 
   /**
    * Ensure E2EE sessions are established with all peer sidecars in the task.
-   * Returns true when all sessions are ready.
+   * Returns true when *every* peer session is ready.
+   *
+   * Two crucial constraints from how QKMS GetPartyMessages works:
+   *   1. It DELETES messages on read (consume-on-retrieval). So we can't call
+   *      it once per peer — that would consume messages destined for other
+   *      peers and silently throw them away.
+   *   2. Each peer's session has its own ratchet state; decrypting a msg from
+   *      peer X with peer Y's key both throws AND corrupts Y's ratchet.
+   *
+   * Strategy: pre-fetch ALL hellos and ALL acks for this round once per tick,
+   * partition by `fromParty`, then hand each peer its own slice via
+   * `performHandshakeWithMessages`. Never bail on the first non-ready peer —
+   * that causes a circular deadlock in t-of-n with n>2.
    */
   private async ensureE2EESessions(task: QkmsTask): Promise<boolean> {
     const pc = this.cfg.peerChannel!;
     const partyIdMap = task.PartyIdMap ?? {};
     const myPartyId = partyIdMap[this.cfg.identity.sidecarId] ?? 2;
 
+    // Build the peer list (sidecar id + party id) and fetch identities first.
+    interface Peer { sidecarId: string; partyId: number; identity?: import('./peer-channel.js').PeerIdentity }
+    const peers: Peer[] = [];
     for (const [peerId, peerPartyId] of Object.entries(partyIdMap)) {
       if (peerId === this.cfg.identity.sidecarId) continue;
       if (peerId === 'service') continue;
+      peers.push({ sidecarId: peerId, partyId: peerPartyId });
+    }
 
-      // Don't short-circuit — sessions are per-task, isReady is global
-
+    for (const peer of peers) {
       try {
-        const peerIdentity = await PeerChannel.fetchPeerIdentity(this.cfg.client, peerId);
-        const ready = await pc.performHandshake(
-          this.cfg.client,
-          task.TaskId,
-          this.cfg.identity.sidecarId,
-          myPartyId,
-          peerId,
-          peerPartyId,
-          peerIdentity,
-        );
-        if (!ready) return false;
+        peer.identity = await PeerChannel.fetchPeerIdentity(this.cfg.client, peer.sidecarId);
       } catch (err) {
-        console.warn('[qkms-sdk] E2EE handshake with', peerId, 'failed:', err);
+        console.warn('[qkms-sdk] fetch peer identity failed for', peer.sidecarId, err);
         return false;
       }
     }
 
-    return true;
+    // Batch-fetch hellos (round 0) and acks (round 1) once per tick.
+    const helloByParty = new Map<number, PartyMessage[]>();
+    const ackByParty = new Map<number, PartyMessage[]>();
+    try {
+      const helloResp = await this.cfg.client.call<Record<string, unknown>, { Messages: PartyMessage[] }>(
+        'GetPartyMessages',
+        { TaskId: task.TaskId, SidecarId: this.cfg.identity.sidecarId, ForParty: myPartyId, Round: 0 },
+      );
+      for (const msg of helloResp.Messages ?? []) {
+        const list = helloByParty.get(msg.fromParty) ?? [];
+        list.push(msg);
+        helloByParty.set(msg.fromParty, list);
+      }
+    } catch {
+      // Treat as empty for this tick.
+    }
+    try {
+      const ackResp = await this.cfg.client.call<Record<string, unknown>, { Messages: PartyMessage[] }>(
+        'GetPartyMessages',
+        { TaskId: task.TaskId, SidecarId: this.cfg.identity.sidecarId, ForParty: myPartyId, Round: 1 },
+      );
+      for (const msg of ackResp.Messages ?? []) {
+        const list = ackByParty.get(msg.fromParty) ?? [];
+        list.push(msg);
+        ackByParty.set(msg.fromParty, list);
+      }
+    } catch {
+      // Treat as empty.
+    }
+
+    // Drive each peer's handshake with its pre-filtered message slice.
+    let allReady = true;
+    for (const peer of peers) {
+      if (!peer.identity) { allReady = false; continue; }
+      try {
+        const ready = await pc.performHandshakeWithMessages(
+          this.cfg.client,
+          task.TaskId,
+          this.cfg.identity.sidecarId,
+          myPartyId,
+          peer.sidecarId,
+          peer.partyId,
+          peer.identity,
+          helloByParty.get(peer.partyId) ?? [],
+          ackByParty.get(peer.partyId) ?? [],
+        );
+        if (!ready) allReady = false;
+      } catch (err) {
+        console.warn('[qkms-sdk] E2EE handshake with', peer.sidecarId, 'failed:', err);
+        allReady = false;
+      }
+    }
+
+    return allReady;
   }
 }

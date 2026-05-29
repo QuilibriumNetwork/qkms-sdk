@@ -116,6 +116,12 @@ export function useQkms(): UsePrivyResult {
         params: [challenge, address],
       })) as string;
 
+      // The server reconstructs the signed message from (timestamp, nonce),
+      // so we must echo back the timestamp it embedded in the challenge —
+      // not Date.now(). Parse it out of the canonical "QNZM-AUTH:v1:<action>:<ts>:<nonce>" form.
+      const tsMatch = challenge.match(/^QNZM-AUTH:v\d+:[^:]+:(\d+):/);
+      const timestamp = tsMatch ? parseInt(tsMatch[1]!, 10) : Math.floor(Date.now() / 1000);
+
       // Exchange for credentials via bridge (creates user under developer account)
       const result = await ctx.authClient.authBridgeWalletLogin(
         appId,
@@ -123,7 +129,7 @@ export function useQkms(): UsePrivyResult {
         address,
         signature,
         nonce,
-        Math.floor(Date.now() / 1000),
+        timestamp,
       );
 
       ctx.setCredentials(result.access_key_id, result.secret_access_key);

@@ -50,7 +50,7 @@ function hexToBytes(hex: string): Uint8Array {
 
 // ---- Peer identity ----
 
-interface PeerIdentity {
+export interface PeerIdentity {
   identityKey: Uint8Array;   // X448 public key (57 bytes Edwards compressed)
   signedPreKey: Uint8Array;  // X448 signed pre-key public key (57 bytes)
 }
@@ -193,6 +193,12 @@ export class PeerChannel {
     }
   }
 
+  /**
+   * Sender side of the handshake. Idempotently sends `hello` (once per task)
+   * and consults a pre-fetched ack pool for the matching peer's response.
+   * Receives `helloByParty`/`ackByParty` from the orchestrator so each round's
+   * `GetPartyMessages` is consumed only once per tick (server deletes on read).
+   */
   private async performSenderHandshake(
     client: QkmsRpcClient,
     taskId: string,
@@ -201,6 +207,7 @@ export class PeerChannel {
     peerId: string,
     peerPartyId: number,
     peerIdentity: PeerIdentity,
+    ackMessages?: PartyMessage[],
   ): Promise<boolean> {
     // Send hello (once per task) — also creates a fresh session
     const helloKey = `${taskId}:${peerId}:hello`;
@@ -222,26 +229,22 @@ export class PeerChannel {
       this.helloSent.add(helloKey);
     }
 
-    // Check for ack
-    try {
-      const resp = await client.call<Record<string, unknown>, { Messages: PartyMessage[] }>(
-        'GetPartyMessages',
-        { TaskId: taskId, SidecarId: mySidecarId, ForParty: myPartyId, Round: E2EE_ROUND_ACK },
-      );
-
-      const msgs = resp.Messages ?? [];
-      for (const msg of msgs) {
-        if (msg.round === E2EE_ROUND_ACK && msg.encrypted) {
+    // Check for ack from this peer. Only acks pre-filtered by fromParty are
+    // passed in — see `ensureE2EESessions` in poll.ts for the orchestration
+    // that batch-fetches the round's messages once per tick.
+    if (ackMessages) {
+      for (const msg of ackMessages) {
+        if (msg.round !== E2EE_ROUND_ACK || !msg.encrypted) continue;
+        try {
           const plaintext = this.decrypt(peerId, JSON.stringify(msg.envelope));
-          const text = new TextDecoder().decode(plaintext);
-          if (text === 'ack') {
+          if (new TextDecoder().decode(plaintext) === 'ack') {
             this.sessionReady.add(`${taskId}:${peerId}`);
             return true;
           }
+        } catch (err) {
+          console.warn(`[peer-channel] ack decrypt from party ${msg.fromParty} failed:`, err);
         }
       }
-    } catch {
-      // Ack not received yet
     }
 
     return false;
@@ -255,45 +258,63 @@ export class PeerChannel {
     peerId: string,
     peerPartyId: number,
     peerIdentity: PeerIdentity,
+    helloMessages?: PartyMessage[],
   ): Promise<boolean> {
-    // Check for hello
-    try {
-      const resp = await client.call<Record<string, unknown>, { Messages: PartyMessage[] }>(
-        'GetPartyMessages',
-        { TaskId: taskId, SidecarId: mySidecarId, ForParty: myPartyId, Round: E2EE_ROUND_HELLO },
-      );
+    if (!helloMessages) return false;
+    for (const msg of helloMessages) {
+      if (msg.round !== E2EE_ROUND_HELLO || !msg.encrypted) continue;
 
-      for (const msg of resp.Messages ?? []) {
-        if (msg.round === E2EE_ROUND_HELLO && msg.encrypted) {
-          // Establish session as receiver (must happen before decrypt)
-          if (!this.hasSession(peerId)) {
-            this.establishSession(peerId, false, peerIdentity.identityKey, peerIdentity.signedPreKey);
-          }
-
-          const plaintext = this.decrypt(peerId, JSON.stringify(msg.envelope));
-          const text = new TextDecoder().decode(plaintext);
-          if (text === 'hello') {
-            // Send ack
-            const ackEnvelope = this.encrypt(peerId, new TextEncoder().encode('ack'));
-            await client.call('SendPartyMessage', {
-              TaskId: taskId,
-              SidecarId: mySidecarId,
-              FromParty: myPartyId,
-              ToParty: peerPartyId,
-              Round: E2EE_ROUND_ACK,
-              Encrypted: true,
-              Envelope: JSON.parse(ackEnvelope),
-            });
-            this.sessionReady.add(`${taskId}:${peerId}`);
-            return true;
-          }
-        }
+      if (!this.hasSession(peerId)) {
+        this.establishSession(peerId, false, peerIdentity.identityKey, peerIdentity.signedPreKey);
       }
-    } catch {
-      // No hello yet
-    }
 
+      try {
+        const plaintext = this.decrypt(peerId, JSON.stringify(msg.envelope));
+        if (new TextDecoder().decode(plaintext) === 'hello') {
+          const ackEnvelope = this.encrypt(peerId, new TextEncoder().encode('ack'));
+          await client.call('SendPartyMessage', {
+            TaskId: taskId,
+            SidecarId: mySidecarId,
+            FromParty: myPartyId,
+            ToParty: peerPartyId,
+            Round: E2EE_ROUND_ACK,
+            Encrypted: true,
+            Envelope: JSON.parse(ackEnvelope),
+          });
+          this.sessionReady.add(`${taskId}:${peerId}`);
+          return true;
+        }
+      } catch (err) {
+        console.warn(`[peer-channel] hello decrypt from party ${msg.fromParty} failed:`, err);
+      }
+    }
     return false;
+  }
+
+  /**
+   * Orchestrator-friendly variant: caller pre-fetches the round's messages
+   * once per tick and passes the per-peer slice to avoid the consume-on-read
+   * problem.
+   */
+  async performHandshakeWithMessages(
+    client: QkmsRpcClient,
+    taskId: string,
+    mySidecarId: string,
+    myPartyId: number,
+    peerId: string,
+    peerPartyId: number,
+    peerIdentity: PeerIdentity,
+    helloMessages: PartyMessage[],
+    ackMessages: PartyMessage[],
+  ): Promise<boolean> {
+    const taskSessionKey = `${taskId}:${peerId}`;
+    if (this.sessionReady.has(taskSessionKey)) return true;
+    const isSender = mySidecarId < peerId;
+    if (isSender) {
+      return this.performSenderHandshake(client, taskId, mySidecarId, myPartyId, peerId, peerPartyId, peerIdentity, ackMessages);
+    } else {
+      return this.performReceiverHandshake(client, taskId, mySidecarId, myPartyId, peerId, peerPartyId, peerIdentity, helloMessages);
+    }
   }
 
   // ---- Protocol messaging ----
@@ -388,7 +409,7 @@ export class PeerChannel {
 
 // ---- Wire types ----
 
-interface PartyMessage {
+export interface PartyMessage {
   fromParty: number;
   toParty: number;
   round: number;
