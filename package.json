@@ -1,7 +1,6 @@
 {
   "name": "@quilibrium/qkms-sdk",
   "version": "2.1.0",
-  "private": true,
   "description": "Threshold MPC key management JavaScript SDK backed by QKMS",
   "scripts": {
     "build": "pnpm -r --filter './packages/**' build",
